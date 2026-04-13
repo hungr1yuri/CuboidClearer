@@ -2,6 +2,11 @@
 
 A powerful building utility mod for Fabric.
 
+## Requirements
+- **Fabric API**: [Download here](https://modrinth.com/mod/fabric-api)
+- **Fabric Loader**: [Get it here](https://fabricmc.net/use/)
+
+
 ## Features
 - **Cuboid Selection**: Select two positions easily.
   - **Commands**: `/cc pos1` and `/cc pos2`
