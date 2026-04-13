@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "cuboidclearer",
+  "version": "1.0.0",
+  "name": "Cuboid Clearer",
+  "description": "A powerful building utility mod. Select two positions with commands or by sneaking and right-clicking with a stick. Clear entire cuboid areas, fill them with any block from your inventory, and use 3x3 hammer mode for fast mining.",
+  "authors": [
+    "@hungr1yuri"
+  ],
+  "contact": {
+    "discord": "@hungryuri"
+  },
+  "license": "MIT",
+  "icon": "pack.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.cuboidclearer.CuboidClearerMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21"
+  }
+}
