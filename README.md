@@ -1,39 +1,41 @@
 # Cuboid Clearer
 
-A powerful building utility mod for Fabric.
+A powerful building utility mod for Fabric 26.1.2.
 
 ## Requirements
+- **Minecraft**: 26.1.2
+- **Fabric Loader**: [Download here](https://fabricmc.net/use/)
 - **Fabric API**: [Download here](https://modrinth.com/mod/fabric-api)
-- **Fabric Loader**: [Get it here](https://fabricmc.net/use/)
-
 
 ## Features
-- **Cuboid Selection**: Select two positions easily.
-  - **Commands**: `/cc pos1` and `/cc pos2`
-  - **Interaction**: Sneak + Right-click with a **Stick** to set positions.
-- **Clear Area**: `/cc clear` - Breaks all blocks in the selection (uses tool durability).
-- **Fill Area**: `/cc fill` - Fills empty spaces with the block in your hand (consumes from inventory).
-- **Hammer Mode**: `/cc hammer` - Toggle 3x3 mining mode.
-- **Selection Visualization**: See your selection with dust particles.
+- **Cuboid Selection**: Select two corner positions with commands or by sneaking and right-clicking a block with a **Stick**.
+- **Clear Area**: `/cc clear` — breaks all blocks in the selection (uses tool durability).
+- **Fill Area**: `/cc fill` — fills empty spaces with the block in your hand (consumes from inventory).
+- **Hammer Mode**: `/cc hammer` — toggles 3×3 mining mode.
+- **Selection Visualization**: Dust particles mark your selected region.
+- **Join Message**: A welcome message appears when you join a world, pointing you to `/cc info`.
 
-## Usage
-1. Set Position 1 and 2 (using a stick or commands).
-2. Use `/cc clear` to empty the area (hold a tool in your hand).
-3. Use `/cc fill` to fill the area with blocks (hold the block you want to use).
+## Commands
+| Command | Description |
+|---|---|
+| `/cc pos1` | Set the first corner |
+| `/cc pos2` | Set the second corner |
+| `/cc clear` | Break all blocks in the selection |
+| `/cc fill` | Fill the selection with your held block |
+| `/cc hammer` | Toggle 3×3 mining mode |
+| `/cc cancel` | Clear your current selection |
+| `/cc info` | Show mod info and hammer status |
+| `/cc commands` | List all available commands |
 
-## How to Build (For Developers)
+## How to Build
 
-If you want to build the mod yourself:
-
-1.  **Install JDK 21**: You need Java 21 to build this mod.
-    *   👉 [Download OpenJDK 21 for Windows](https://api.adoptium.net/v3/installer/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk)
-2.  **Run the Build**: Open a terminal in this folder and run:
-    ```powershell
-    .\gradlew build
-    ```
-3.  **Get the JAR**: Once finished, your mod file will be here:
-    `build/libs/cuboid-clearer-1.0.0.jar`
+1. **Install JDK 25** — [Eclipse Temurin 25](https://adoptium.net/temurin/releases/?version=25)
+2. **Run the build** in the project folder:
+   ```
+   ./gradlew build
+   ```
+3. **Find the JAR** at `build/libs/cuboid-clearer-1.0.0.jar`
 
 ## Credits
-Author: [@hungr1yuri](https://github.com/hungr1yuri)
+Author: [@hungr1yuri](https://github.com/hungr1yuri)  
 Contact: @hungryuri on Discord
