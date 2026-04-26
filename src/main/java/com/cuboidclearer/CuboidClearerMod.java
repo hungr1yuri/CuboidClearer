@@ -5,22 +5,24 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.command.argument.BlockPosArgumentType;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.particle.DustParticleEffect;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,41 +43,41 @@ public class CuboidClearerMod implements ModInitializer {
 
         // shift + right-click with stick to set pos1 then pos2
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
-            if (world.isClient()) return ActionResult.PASS;
-            if (hand != Hand.MAIN_HAND) return ActionResult.PASS;
-            if (!player.isSneaking()) return ActionResult.PASS;
-            if (player.getMainHandStack().getItem() != Items.STICK) return ActionResult.PASS;
-            if (!(player instanceof ServerPlayerEntity serverPlayer)) return ActionResult.PASS;
+            if (world.isClientSide()) return InteractionResult.PASS;
+            if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
+            if (!player.isShiftKeyDown()) return InteractionResult.PASS;
+            if (player.getMainHandItem().getItem() != Items.STICK) return InteractionResult.PASS;
+            if (!(player instanceof ServerPlayer serverPlayer)) return InteractionResult.PASS;
 
-            UUID uuid = player.getUuid();
+            UUID uuid = player.getUUID();
             BlockPos clicked = hitResult.getBlockPos();
 
             if (!pos1Map.containsKey(uuid)) {
                 pos1Map.put(uuid, clicked);
-                player.sendMessage(Text.literal("\u00a7aPos1 set to " + clicked.toShortString() + " \u00a77(sneak+right-click again for Pos2)"), true);
-                ((ServerWorld) world).spawnParticles(serverPlayer, new DustParticleEffect(0x00FF44, 1.8f),
+                serverPlayer.sendSystemMessage(Component.literal("§aPos1 set to " + clicked.toShortString() + " §7(sneak+right-click again for Pos2)"));
+                ((ServerLevel) world).sendParticles(serverPlayer, new DustParticleOptions(0x00FF44, 1.8f),
                     true, false, clicked.getX() + 0.5, clicked.getY() + 0.5, clicked.getZ() + 0.5,
                     40, 0.5, 0.5, 0.5, 0.0);
             } else {
                 pos2Map.put(uuid, clicked);
-                player.sendMessage(Text.literal("\u00a7cPos2 set to " + clicked.toShortString() + " \u00a7e\u2014 run \u00a7f/cc clear\u00a7e or \u00a7f/cc fill"), true);
-                ((ServerWorld) world).spawnParticles(serverPlayer, new DustParticleEffect(0xFF2222, 1.8f),
+                serverPlayer.sendSystemMessage(Component.literal("§cPos2 set to " + clicked.toShortString() + " §e— run §f/cc clear§e or §f/cc fill"));
+                ((ServerLevel) world).sendParticles(serverPlayer, new DustParticleOptions(0xFF2222, 1.8f),
                     true, false, clicked.getX() + 0.5, clicked.getY() + 0.5, clicked.getZ() + 0.5,
                     40, 0.5, 0.5, 0.5, 0.0);
             }
 
-            return ActionResult.SUCCESS;
+            return InteractionResult.SUCCESS;
         });
 
         // 3x3 hammer
         PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
-            if (world.isClient()) return;
-            UUID uuid = player.getUuid();
+            if (world.isClientSide()) return;
+            UUID uuid = player.getUUID();
             if (!hammerEnabled.contains(uuid)) return;
             if (hammerBusy.contains(uuid)) return;
-            if (!(player instanceof ServerPlayerEntity serverPlayer)) return;
+            if (!(player instanceof ServerPlayer serverPlayer)) return;
 
-            ItemStack tool = player.getMainHandStack();
+            ItemStack tool = player.getMainHandItem();
             if (tool.isEmpty()) return;
 
             hammerBusy.add(uuid);
@@ -85,109 +87,114 @@ public class CuboidClearerMod implements ModInitializer {
                 for (int b = -1; b <= 1; b++) {
                     if (a == 0 && b == 0) continue;
                     if (tool.isEmpty()) break;
-                    BlockPos bp = pos.offset(axes[0], a).offset(axes[1], b);
+                    BlockPos bp = pos.relative(axes[0], a).relative(axes[1], b);
                     var bState = world.getBlockState(bp);
                     if (bState.isAir()) continue;
                     if (bState.getBlock() == Blocks.BEDROCK) continue;
 
-                    Block.dropStacks(bState, (ServerWorld) world, bp,
-                        world.getBlockEntity(bp), player, tool);
-                    world.breakBlock(bp, false, player);
-                    // damage once per extra block broken — same as if player broke it normally
-                    tool.damage(1, (ServerWorld) world, serverPlayer, item -> {});
+                    Block.dropResources(bState, world, bp, world.getBlockEntity(bp), player, tool);
+                    world.destroyBlock(bp, false, player);
+                    tool.hurtAndBreak(1, serverPlayer, EquipmentSlot.MAINHAND);
                 }
             }
 
             hammerBusy.remove(uuid);
         });
 
+        // join message
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+            handler.player.sendSystemMessage(Component.literal(
+                "§6§lCuboidClearer §r§7has been loaded. Type §f/cc info §7for help."))
+        );
+
         // commands
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(CommandManager.literal("cc")
+            dispatcher.register(Commands.literal("cc")
 
-                .then(CommandManager.literal("pos1")
+                .then(Commands.literal("pos1")
                     .executes(ctx -> setPos(ctx, 1, null))
-                    .then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
-                        .executes(ctx -> setPos(ctx, 1, BlockPosArgumentType.getBlockPos(ctx, "pos")))))
+                    .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                        .executes(ctx -> setPos(ctx, 1, BlockPosArgument.getBlockPos(ctx, "pos")))))
 
-                .then(CommandManager.literal("pos2")
+                .then(Commands.literal("pos2")
                     .executes(ctx -> setPos(ctx, 2, null))
-                    .then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
-                        .executes(ctx -> setPos(ctx, 2, BlockPosArgumentType.getBlockPos(ctx, "pos")))))
+                    .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                        .executes(ctx -> setPos(ctx, 2, BlockPosArgument.getBlockPos(ctx, "pos")))))
 
-                .then(CommandManager.literal("clear").executes(CuboidClearerMod::clear))
-                .then(CommandManager.literal("fill").executes(CuboidClearerMod::fill))
-                .then(CommandManager.literal("hammer").executes(CuboidClearerMod::hammer))
-                .then(CommandManager.literal("info").executes(CuboidClearerMod::info))
-                .then(CommandManager.literal("cancel").executes(CuboidClearerMod::cancel))
+                .then(Commands.literal("clear").executes(CuboidClearerMod::clear))
+                .then(Commands.literal("fill").executes(CuboidClearerMod::fill))
+                .then(Commands.literal("hammer").executes(CuboidClearerMod::hammer))
+                .then(Commands.literal("info").executes(CuboidClearerMod::info))
+                .then(Commands.literal("commands").executes(CuboidClearerMod::commandList))
+                .then(Commands.literal("cancel").executes(CuboidClearerMod::cancel))
             );
         });
     }
 
-    private static Direction[] getPerpendicularAxes(ServerPlayerEntity player, BlockPos brokenPos) {
-        int playerY = player.getBlockPos().getY();
+    private static Direction[] getPerpendicularAxes(ServerPlayer player, BlockPos brokenPos) {
+        int playerY = player.blockPosition().getY();
         int blockY = brokenPos.getY();
         if (blockY < playerY || blockY > playerY + 1) {
             return new Direction[]{Direction.EAST, Direction.NORTH};
         }
-        return switch (player.getHorizontalFacing()) {
+        return switch (player.getDirection()) {
             case NORTH, SOUTH -> new Direction[]{Direction.EAST, Direction.UP};
             case EAST, WEST   -> new Direction[]{Direction.NORTH, Direction.UP};
             default           -> new Direction[]{Direction.EAST, Direction.NORTH};
         };
     }
 
-    private static int hammer(CommandContext<ServerCommandSource> ctx) {
-        ServerCommandSource src = ctx.getSource();
-        ServerPlayerEntity player = src.getPlayer();
-        if (player == null) { src.sendError(Text.literal("Must be run by a player.")); return 0; }
+    private static int hammer(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerPlayer player = src.getPlayer();
+        if (player == null) { src.sendFailure(Component.literal("Must be run by a player.")); return 0; }
 
-        UUID uuid = player.getUuid();
+        UUID uuid = player.getUUID();
         if (hammerEnabled.contains(uuid)) {
             hammerEnabled.remove(uuid);
-            src.sendFeedback(() -> Text.literal("\u00a7cHammer mode OFF."), false);
+            src.sendSuccess(() -> Component.literal("§cHammer mode OFF."), false);
         } else {
             hammerEnabled.add(uuid);
-            src.sendFeedback(() -> Text.literal("\u00a7aHammer mode ON \u00a77\u2014 breaks 3x3, durability used per block."), false);
+            src.sendSuccess(() -> Component.literal("§aHammer mode ON §7— breaks 3x3, durability used per block."), false);
         }
         return 1;
     }
 
-    private static int setPos(CommandContext<ServerCommandSource> ctx, int which, BlockPos explicit) {
-        ServerCommandSource src = ctx.getSource();
-        ServerPlayerEntity player = src.getPlayer();
-        if (player == null) { src.sendError(Text.literal("Must be run by a player.")); return 0; }
+    private static int setPos(CommandContext<CommandSourceStack> ctx, int which, BlockPos explicit) {
+        CommandSourceStack src = ctx.getSource();
+        ServerPlayer player = src.getPlayer();
+        if (player == null) { src.sendFailure(Component.literal("Must be run by a player.")); return 0; }
 
-        BlockPos pos = explicit != null ? explicit : player.getBlockPos();
-        UUID uuid = player.getUuid();
+        BlockPos pos = explicit != null ? explicit : player.blockPosition();
+        UUID uuid = player.getUUID();
         if (which == 1) pos1Map.put(uuid, pos);
         else            pos2Map.put(uuid, pos);
 
-        src.sendFeedback(() -> Text.literal(
-            "\u00a7aPos" + which + " set to " + pos.toShortString() +
-            (bothSet(uuid) ? "  \u00a7e(both set \u2014 run \u00a7f/cc clear\u00a7e or \u00a7f/cc fill\u00a7e)" : "")), false);
+        src.sendSuccess(() -> Component.literal(
+            "§aPos" + which + " set to " + pos.toShortString() +
+            (bothSet(uuid) ? "  §e(both set — run §f/cc clear§e or §f/cc fill§e)" : "")), false);
 
-        ServerWorld world = src.getWorld();
-        world.spawnParticles(player, new DustParticleEffect(0x00FF44, 1.8f),
+        ServerLevel world = src.getLevel();
+        world.sendParticles(player, new DustParticleOptions(0x00FF44, 1.8f),
             true, false, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
             40, 0.5, 0.5, 0.5, 0.0);
         return 1;
     }
 
-    private static int clear(CommandContext<ServerCommandSource> ctx) {
-        ServerCommandSource src = ctx.getSource();
-        ServerPlayerEntity player = src.getPlayer();
-        if (player == null) { src.sendError(Text.literal("Must be run by a player.")); return 0; }
+    private static int clear(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerPlayer player = src.getPlayer();
+        if (player == null) { src.sendFailure(Component.literal("Must be run by a player.")); return 0; }
 
-        UUID uuid = player.getUuid();
+        UUID uuid = player.getUUID();
         if (!bothSet(uuid)) {
-            src.sendError(Text.literal("Set both positions first. Use /cc pos1 and /cc pos2, or sneak+right-click with a stick."));
+            src.sendFailure(Component.literal("Set both positions first. Use /cc pos1 and /cc pos2, or sneak+right-click with a stick."));
             return 0;
         }
 
-        ItemStack tool = player.getMainHandStack();
+        ItemStack tool = player.getMainHandItem();
         if (tool.isEmpty() || tool.getMaxDamage() <= 0) {
-            src.sendError(Text.literal("Hold a tool with durability in your main hand (pickaxe, axe, shovel etc)."));
+            src.sendFailure(Component.literal("Hold a tool with durability in your main hand (pickaxe, axe, shovel etc)."));
             return 0;
         }
 
@@ -200,11 +207,11 @@ public class CuboidClearerMod implements ModInitializer {
         long volume = (long)(x2-x1+1) * (y2-y1+1) * (z2-z1+1);
 
         if (volume > MAX_BLOCKS) {
-            src.sendError(Text.literal("Too large! " + volume + " blocks (max " + MAX_BLOCKS + ")."));
+            src.sendFailure(Component.literal("Too large! " + volume + " blocks (max " + MAX_BLOCKS + ")."));
             return 0;
         }
 
-        ServerWorld world = src.getWorld();
+        ServerLevel world = src.getLevel();
         drawOutline(world, player, x1, y1, z1, x2, y2, z2);
 
         int broken = 0;
@@ -218,43 +225,43 @@ public class CuboidClearerMod implements ModInitializer {
                     if (state.isAir()) continue;
                     if (state.getBlock() == Blocks.BEDROCK) continue;
 
-                    Block.dropStacks(state, world, bp, world.getBlockEntity(bp), player, tool);
-                    world.breakBlock(bp, false, player);
-                    tool.damage(1, world, player, item -> {});
+                    Block.dropResources(state, world, bp, world.getBlockEntity(bp), player, tool);
+                    world.destroyBlock(bp, false, player);
+                    tool.hurtAndBreak(1, player, EquipmentSlot.MAINHAND);
                     broken++;
                 }
             }
         }
 
         final int result = broken;
-        src.sendFeedback(() -> Text.literal("\u00a7aBroke \u00a7f" + result + "\u00a7a blocks."), false);
+        src.sendSuccess(() -> Component.literal("§aBroke §f" + result + "§a blocks."), false);
         return result;
     }
 
-    private static int fill(CommandContext<ServerCommandSource> ctx) {
-        ServerCommandSource src = ctx.getSource();
-        ServerPlayerEntity player = src.getPlayer();
-        if (player == null) { src.sendError(Text.literal("Must be run by a player.")); return 0; }
+    private static int fill(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerPlayer player = src.getPlayer();
+        if (player == null) { src.sendFailure(Component.literal("Must be run by a player.")); return 0; }
 
-        UUID uuid = player.getUuid();
+        UUID uuid = player.getUUID();
         if (!bothSet(uuid)) {
-            src.sendError(Text.literal("Set both positions first. Use /cc pos1 and /cc pos2, or sneak+right-click with a stick."));
+            src.sendFailure(Component.literal("Set both positions first. Use /cc pos1 and /cc pos2, or sneak+right-click with a stick."));
             return 0;
         }
 
-        ItemStack held = player.getMainHandStack();
+        ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            src.sendError(Text.literal("Hold the block you want to fill with in your main hand."));
+            src.sendFailure(Component.literal("Hold the block you want to fill with in your main hand."));
             return 0;
         }
 
-        Block fillBlock = Block.getBlockFromItem(held.getItem());
+        Block fillBlock = Block.byItem(held.getItem());
         if (fillBlock == Blocks.AIR) {
-            src.sendError(Text.literal("That item isn't a placeable block."));
+            src.sendFailure(Component.literal("That item isn't a placeable block."));
             return 0;
         }
 
-        BlockState fillState = fillBlock.getDefaultState();
+        BlockState fillState = fillBlock.defaultBlockState();
         BlockPos p1 = pos1Map.remove(uuid);
         BlockPos p2 = pos2Map.remove(uuid);
 
@@ -264,22 +271,22 @@ public class CuboidClearerMod implements ModInitializer {
         long volume = (long)(x2-x1+1) * (y2-y1+1) * (z2-z1+1);
 
         if (volume > MAX_BLOCKS) {
-            src.sendError(Text.literal("Too large! " + volume + " blocks (max " + MAX_BLOCKS + ")."));
+            src.sendFailure(Component.literal("Too large! " + volume + " blocks (max " + MAX_BLOCKS + ")."));
             return 0;
         }
 
         int available = 0;
-        for (int i = 0; i < player.getInventory().size(); i++) {
-            ItemStack stack = player.getInventory().getStack(i);
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
             if (stack.getItem() == fillBlock.asItem()) available += stack.getCount();
         }
 
         if (available == 0) {
-            src.sendError(Text.literal("You don't have any " + fillBlock.getName().getString() + " in your inventory."));
+            src.sendFailure(Component.literal("You don't have any " + fillBlock.getName().getString() + " in your inventory."));
             return 0;
         }
 
-        ServerWorld world = src.getWorld();
+        ServerLevel world = src.getLevel();
         drawOutline(world, player, x1, y1, z1, x2, y2, z2);
 
         int placed = 0;
@@ -291,67 +298,65 @@ public class CuboidClearerMod implements ModInitializer {
                     if (!world.getBlockState(bp).isAir()) continue;
 
                     boolean consumed = false;
-                    for (int i = 0; i < player.getInventory().size(); i++) {
-                        ItemStack stack = player.getInventory().getStack(i);
+                    for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                        ItemStack stack = player.getInventory().getItem(i);
                         if (stack.getItem() == fillBlock.asItem()) {
-                            stack.decrement(1);
+                            stack.shrink(1);
                             consumed = true;
                             break;
                         }
                     }
                     if (!consumed) break outer;
 
-                    world.setBlockState(bp, fillState);
+                    world.setBlockAndUpdate(bp, fillState);
                     placed++;
                 }
             }
         }
 
         final int result = placed;
-        src.sendFeedback(() -> Text.literal("\u00a7aPlaced \u00a7f" + result + "\u00a7a blocks of "
+        src.sendSuccess(() -> Component.literal("§aPlaced §f" + result + "§a blocks of "
             + fillBlock.getName().getString() + "."), false);
         return result;
     }
 
-    private static int info(CommandContext<ServerCommandSource> ctx) {
-        ServerCommandSource src = ctx.getSource();
-        ServerPlayerEntity player = src.getPlayer();
+    private static int info(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerPlayer player = src.getPlayer();
         if (player == null) return 0;
 
-        UUID uuid = player.getUuid();
-        BlockPos p1 = pos1Map.get(uuid);
-        BlockPos p2 = pos2Map.get(uuid);
-        String s1 = p1 != null ? p1.toShortString() : "\u00a7cnot set";
-        String s2 = p2 != null ? p2.toShortString() : "\u00a7cnot set";
-        final String vol;
-        if (p1 != null && p2 != null) {
-            long v = (long)(Math.abs(p2.getX()-p1.getX())+1)
-                   * (Math.abs(p2.getY()-p1.getY())+1)
-                   * (Math.abs(p2.getZ()-p1.getZ())+1);
-            vol = "  \u00a77(\u00a7f" + v + " \u00a77blocks)";
-        } else {
-            vol = "";
-        }
-        String hammerStatus = hammerEnabled.contains(uuid) ? "\u00a7aON" : "\u00a7cOFF";
-        src.sendFeedback(() -> Text.literal(
-            "\u00a76\u00a7lCuboidClearer\n" +
-            "\u00a77Questions? Add \u00a7b@hungryuri \u00a77on Discord\n" +
-            "\u00a77Commands: \u00a7fpos1, pos2, clear, fill, hammer, cancel\n" +
-            "\u00a77Tip: \u00a7fSneak+right-click a block with a \u00a7astick\u00a7f to set positions\n" +
-            "\u00a77============================\n" +
-            "\u00a7aPos1: \u00a7f" + s1 + "\n" +
-            "\u00a7cPos2: \u00a7f" + s2 + vol + "\n" +
-            "\u00a7eHammer: " + hammerStatus), false);
+        UUID uuid = player.getUUID();
+        String hammerStatus = hammerEnabled.contains(uuid) ? "§aON" : "§cOFF";
+        src.sendSuccess(() -> Component.literal(
+            "§6§lCuboidClearer\n" +
+            "§7Questions? Add §b@hungryuri §7on Discord\n" +
+            "§7Tip: §fShift§7+right-click a block with a §astick §7to set positions\n" +
+            "§7Type §f/cc commands §7for all available commands\n" +
+            "§7——————————————————\n" +
+            "§eHammer: " + hammerStatus), false);
         return 1;
     }
 
-    private static int cancel(CommandContext<ServerCommandSource> ctx) {
-        ServerCommandSource src = ctx.getSource();
-        ServerPlayerEntity player = src.getPlayer();
+    private static int cancel(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack src = ctx.getSource();
+        ServerPlayer player = src.getPlayer();
         if (player == null) return 0;
-        pos1Map.remove(player.getUuid());
-        pos2Map.remove(player.getUuid());
-        src.sendFeedback(() -> Text.literal("\u00a77Selection cleared."), false);
+        pos1Map.remove(player.getUUID());
+        pos2Map.remove(player.getUUID());
+        src.sendSuccess(() -> Component.literal("§7Selection cleared."), false);
+        return 1;
+    }
+
+    private static int commandList(CommandContext<CommandSourceStack> ctx) {
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            "§6§lCuboidClearer §r§7— available commands:\n" +
+            "§f/cc pos1 §8· §f/cc pos2 §7— select two corners\n" +
+            "§f/cc clear §7— break all blocks in the selection\n" +
+            "§f/cc fill §7— fill the selection with your held block\n" +
+            "§f/cc hammer §7— toggle 3×3 mining mode\n" +
+            "§f/cc cancel §7— clear your current selection\n" +
+            "§f/cc info §7— show mod info & hammer status\n" +
+            "§7Tip: §fShift§7+right-click with a §astick §7to set corners without commands"), false);
         return 1;
     }
 
@@ -359,9 +364,9 @@ public class CuboidClearerMod implements ModInitializer {
         return pos1Map.containsKey(uuid) && pos2Map.containsKey(uuid);
     }
 
-    private static void drawOutline(ServerWorld world, ServerPlayerEntity player,
+    private static void drawOutline(ServerLevel world, ServerPlayer player,
                                     int x1, int y1, int z1, int x2, int y2, int z2) {
-        DustParticleEffect red = new DustParticleEffect(0xFF2222, 1.0f);
+        DustParticleOptions red = new DustParticleOptions(0xFF2222, 1.0f);
         for (int x = x1; x <= x2; x++) {
             dot(world, player, red, x+0.5, y1,     z1);
             dot(world, player, red, x+0.5, y2+1.0, z1);
@@ -382,8 +387,8 @@ public class CuboidClearerMod implements ModInitializer {
         }
     }
 
-    private static void dot(ServerWorld world, ServerPlayerEntity player,
-                            DustParticleEffect dust, double x, double y, double z) {
-        world.spawnParticles(player, dust, true, false, x, y, z, 1, 0.0, 0.0, 0.0, 0.0);
+    private static void dot(ServerLevel world, ServerPlayer player,
+                            DustParticleOptions dust, double x, double y, double z) {
+        world.sendParticles(player, dust, true, false, x, y, z, 1, 0.0, 0.0, 0.0, 0.0);
     }
 }
