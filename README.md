@@ -1,41 +1,69 @@
 # Cuboid Clearer
 
-A powerful building utility mod for Fabric 26.1.2.
+[![Build](https://github.com/hungr1yuri/CuboidClearer/actions/workflows/build.yml/badge.svg)](https://github.com/hungr1yuri/CuboidClearer/actions/workflows/build.yml)
+![Minecraft](https://img.shields.io/badge/Minecraft-26.1.2-brightgreen)
+![Loader](https://img.shields.io/badge/Loader-Fabric-blue)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
+A small server-side building tool for Fabric. Pick two corners, then wipe the
+whole area or fill it with a block in one command. There's also a 3x3 hammer
+mode for chewing through walls faster.
+
+It runs on the server (or in singleplayer), so players don't need it installed
+on the client.
+
+> Also available for NeoForge: [CuboidClearer-NeoForge](https://github.com/hungr1yuri/CuboidClearer-NeoForge).
 
 ## Requirements
-- **Minecraft**: 26.1.2
-- **Fabric Loader**: [Download here](https://fabricmc.net/use/)
-- **Fabric API**: [Download here](https://modrinth.com/mod/fabric-api)
 
-## Features
-- **Cuboid Selection**: Select two corner positions with commands or by sneaking and right-clicking a block with a **Stick**.
-- **Clear Area**: `/cc clear` — breaks all blocks in the selection (uses tool durability).
-- **Fill Area**: `/cc fill` — fills empty spaces with the block in your hand (consumes from inventory).
-- **Hammer Mode**: `/cc hammer` — toggles 3×3 mining mode.
-- **Selection Visualization**: Dust particles mark your selected region.
-- **Join Message**: A welcome message appears when you join a world, pointing you to `/cc info`.
+- Minecraft 26.1.2
+- [Fabric Loader](https://fabricmc.net/use/)
+- [Fabric API](https://modrinth.com/mod/fabric-api)
+
+## How it works
+
+Select two corners, either with `/cc pos1` and `/cc pos2`, or by sneaking and
+right-clicking two blocks with a stick. Dust particles trace the box so you can
+see what you've picked. Then run `/cc clear` to break everything inside, or
+`/cc fill` to fill the gaps with whatever block you're holding.
+
+A few details worth knowing:
+
+- `clear` uses your held tool and spends its durability, the same as mining by
+  hand. Bedrock is left alone.
+- `fill` pulls blocks from your inventory and only fills empty space.
+- Selections are capped at 5000 blocks so a typo can't wipe half the world.
+- Hammer mode breaks the 3x3 around each block you mine, costing durability per
+  block.
 
 ## Commands
-| Command | Description |
+
+| Command | What it does |
 |---|---|
-| `/cc pos1` | Set the first corner |
+| `/cc pos1` | Set the first corner (your position, or pass coordinates) |
 | `/cc pos2` | Set the second corner |
-| `/cc clear` | Break all blocks in the selection |
-| `/cc fill` | Fill the selection with your held block |
-| `/cc hammer` | Toggle 3×3 mining mode |
+| `/cc clear` | Break every block in the selection |
+| `/cc fill` | Fill the selection with the block in your hand |
+| `/cc hammer` | Toggle 3x3 mining mode |
 | `/cc cancel` | Clear your current selection |
 | `/cc info` | Show mod info and hammer status |
-| `/cc commands` | List all available commands |
+| `/cc commands` | List the commands |
 
-## How to Build
+## Building
 
-1. **Install JDK 25** — [Eclipse Temurin 25](https://adoptium.net/temurin/releases/?version=25)
-2. **Run the build** in the project folder:
-   ```
-   ./gradlew build
-   ```
-3. **Find the JAR** at `build/libs/cuboid-clearer-1.0.0.jar`
+You'll need [JDK 25](https://adoptium.net/temurin/releases/?version=25). From the
+project folder:
 
-## Credits
-Author: [@hungr1yuri](https://github.com/hungr1yuri)  
-Contact: @hungryuri on Discord
+```
+./gradlew build
+```
+
+The jar lands in `build/libs/cuboid-clearer-2.0.0.jar`.
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE).
+
+## Contact
+
+Made by [@hungr1yuri](https://github.com/hungr1yuri). Questions: `@hungryuri` on Discord.
